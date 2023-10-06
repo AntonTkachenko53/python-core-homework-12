@@ -1,5 +1,6 @@
 from collections import UserDict
 from datetime import datetime
+import json
 
 
 class Field:
@@ -103,7 +104,11 @@ class Record:
             return 'No birthday info for this contact'
 
     def __str__(self):
-        return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
+        name_str = f"Contact name: {self.name.value}"
+        phones_str = '; '.join(p.value for p in self.phones)
+        birthday_str = f", birthday: {self.birthday.value.strftime('%Y-%m-%d')}" if self.birthday else (", birthday:"
+                                                                                                        " no info")
+        return f"{name_str}, phones: {phones_str}{birthday_str}"
 
 
 class AddressBook(UserDict):
@@ -131,3 +136,60 @@ class AddressBook(UserDict):
                 index += n
             except IndexError:
                 yield dict(list(self.data.items())[index:index + not_fitting])
+
+    def find_contacts(self, message: str):
+        result = []
+        for contact in self.data.values():
+            for phone in contact.phones:
+                if phone.value.find(message) != -1:
+                    result.append(str(contact))
+            if contact.name.value.find(message) != -1:
+                result.append(str(contact))
+        return result if result else 'No info found'
+
+    def save_to_file(self, filename: str):
+        records_to_save = []
+        for contact in self.data.values():
+            record_data = {
+                "name": contact.name.value,
+                "phones": [phone.value for phone in contact.phones],
+                "birthday": None
+            }
+            if contact.birthday:
+                record_data["birthday"] = contact.birthday.value.strftime("%Y-%m-%d")
+            records_to_save.append(record_data)
+        with open(filename, 'w') as f:
+            json.dump(records_to_save, f)
+
+    @classmethod
+    def load_from_file(cls, filename: str):
+        with open(filename, 'r') as f:
+            loaded_data = json.load(f)
+        unloaded_address_book = cls()
+        for record_data in loaded_data:
+            name = record_data["name"]
+            phones = record_data["phones"]
+            birthday_str = record_data["birthday"]
+            if birthday_str:
+                birthday = Birthday(datetime.strptime(birthday_str, "%Y-%m-%d"))
+            else:
+                birthday = None
+            contact = Record(name, birthday)
+            for phone in phones:
+                contact.add_phone(phone)
+            unloaded_address_book.add_record(contact)
+        return unloaded_address_book
+
+
+record = Record('Anton')
+record.add_phone('0964784877')
+record.birthday = Birthday(datetime(year=1990, month=10, day=10))
+address_book = AddressBook()
+address_book.add_record(record)
+address_book.save_to_file('address_book.json')
+unpacked_address_book = address_book.load_from_file('address_book.json')
+unpacked_record = unpacked_address_book['Anton']
+print(unpacked_record.name.value)
+print(unpacked_record.phones[0].value)
+print(unpacked_record.birthday)
+print(address_book.find_contacts('ton'))
